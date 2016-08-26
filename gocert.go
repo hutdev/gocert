@@ -74,30 +74,20 @@ func GenerateKey(path string) (*rsa.PrivateKey, error) {
 	}
 }
 
-func CreateCACert(path string, cn string, key *rsa.PrivateKey) (*x509.Certificate, error) {
-	if serial, serialErr := rand.Int(rand.Reader, big.NewInt(math.MaxInt64)); serialErr == nil {
-		template := x509.Certificate{
-			Subject: pkix.Name{
-				CommonName: cn,
-			},
-			SerialNumber: serial,
-			NotBefore:    time.Now(),
-			NotAfter:     time.Now().AddDate(defaultCAAge, 0, 0),
-			IsCA:         true,
-			KeyUsage:     x509.KeyUsageCertSign,
-		}
-		if cert, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key); err == nil {
-			ioutil.WriteFile(path, cert, restrictivePermissions)
-			return &template, nil
-		} else {
-			return nil, err
-		}
-	} else {
-		return nil, serialErr
-	}
-}
+func CreateCert(path string, cn string, signerKey *rsa.PrivateKey, ca *x509.Certificate, key *rsa.PublicKey) (*x509.Certificate, error) {
+	var signeeKey *rsa.PublicKey
+	var signer *x509.Certificate
+	var certAge int
+	isCa := ca == nil
 
-func CreateServerCert(path string, cn string, ca *x509.Certificate, caKey *rsa.PrivateKey, key *rsa.PublicKey) (*x509.Certificate, error) {
+	if isCa {
+		signeeKey = &signerKey.PublicKey
+		certAge = defaultCAAge
+	} else {
+		signeeKey = key
+		certAge = defaultCertAge
+	}
+
 	if serial, serialErr := rand.Int(rand.Reader, big.NewInt(math.MaxInt64)); serialErr == nil {
 		template := x509.Certificate{
 			Subject: pkix.Name{
@@ -105,11 +95,20 @@ func CreateServerCert(path string, cn string, ca *x509.Certificate, caKey *rsa.P
 			},
 			SerialNumber: serial,
 			NotBefore:    time.Now(),
-			NotAfter:     time.Now().AddDate(defaultCertAge, 0, 0),
-			KeyUsage:     x509.KeyUsageDataEncipherment,
-			ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		}
-		if cert, err := x509.CreateCertificate(rand.Reader, &template, ca, key, caKey); err == nil {
+		template.NotAfter = template.NotBefore.AddDate(certAge, 0, 0)
+
+		if isCa {
+			signer = &template
+			template.IsCA = true
+			template.KeyUsage = x509.KeyUsageCertSign
+		} else {
+			signer = ca
+			template.KeyUsage = x509.KeyUsageDataEncipherment
+			template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+		}
+
+		if cert, err := x509.CreateCertificate(rand.Reader, &template, signer, signeeKey, signerKey); err == nil {
 			ioutil.WriteFile(path, cert, restrictivePermissions)
 			return &template, nil
 		} else {
@@ -149,14 +148,14 @@ func main() {
 	}
 
 	//Create a self-signed CA certificate
-	if caCert, err = CreateCACert(caCertPath, caCommonName, caKey); err == nil {
+	if caCert, err = CreateCert(caCertPath, caCommonName, caKey, nil, nil); err == nil {
 		log.Printf("CA certificate stored at %s.\n", caCertPath)
 	} else {
 		log.Fatal(err)
 	}
 
 	//Create a server certificate
-	if _, err = CreateServerCert(certPath, commonName, caCert, caKey, &certKey.PublicKey); err == nil {
+	if _, err = CreateCert(certPath, commonName, caKey, caCert, &certKey.PublicKey); err == nil {
 		log.Printf("Server certificate stored at %s.\n", certPath)
 	} else {
 		log.Fatal(err)
