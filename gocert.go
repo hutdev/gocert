@@ -48,6 +48,7 @@ const defaultCertKeyName = "server.key"
 const defaultCertName = "server.crt"
 const restrictivePermissions = 0600
 
+var outpath string
 var commonName string
 var caCommonName string
 
@@ -56,6 +57,9 @@ func init() {
 	const cnFlag = "cn"
 	const caCnUsage = "Value for the common name (CN) field of the certificate authority (CA)"
 	const caCnFlag = "cacn"
+
+	flag.StringVar(&outpath, "out", defaultOutpath, "Output directory")
+
 	if hostname, err := os.Hostname(); err == nil {
 		flag.StringVar(&commonName, cnFlag, hostname, cnUsage)
 		flag.StringVar(&caCommonName, caCnFlag, hostname, caCnUsage)
@@ -120,7 +124,6 @@ func CreateCert(path string, cn string, signerKey *rsa.PrivateKey, ca *x509.Cert
 }
 
 func main() {
-	outpath := defaultOutpath
 	caKeyName := defaultCaKeyName
 	caKeyPath := path.Join(outpath, caKeyName)
 	caCertName := defaultCaCertName
