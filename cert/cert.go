@@ -36,14 +36,6 @@ import (
 
 const DEFAULT_FILE_PERM = 0600
 
-func GeneratePrivateKeyfile(path string, keysize int) (*rsa.PrivateKey, error) {
-	if key, err := rsa.GenerateKey(rand.Reader, keysize); err == nil {
-		return key, ioutil.WriteFile(path, x509.MarshalPKCS1PrivateKey(key), DEFAULT_FILE_PERM)
-	} else {
-		return nil, err
-	}
-}
-
 type CertificateRequest struct {
 	ValidYears           int
 	CommonName           string
@@ -51,6 +43,22 @@ type CertificateRequest struct {
 	CertificateKey       *rsa.PublicKey
 	ClientCert           bool
 	CertificateAuthority *x509.Certificate
+}
+
+func NewCertificateAuthorityRequest(validYears int, commonName string, privKey *rsa.PrivateKey) *CertificateRequest {
+	return &CertificateRequest{
+		ValidYears: validYears,
+		CommonName: commonName,
+		SignerKey:  privKey,
+	}
+}
+
+func GeneratePrivateKeyfile(path string, keysize int) (*rsa.PrivateKey, error) {
+	if key, err := rsa.GenerateKey(rand.Reader, keysize); err == nil {
+		return key, ioutil.WriteFile(path, x509.MarshalPKCS1PrivateKey(key), DEFAULT_FILE_PERM)
+	} else {
+		return nil, err
+	}
 }
 
 func CreateCert(path string, csr *CertificateRequest) (*x509.Certificate, error) {

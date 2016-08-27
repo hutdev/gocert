@@ -142,11 +142,7 @@ func main() {
 
 	//Create a self-signed CA certificate
 	if caCert == nil {
-		caCsr = &cert.CertificateRequest{
-			ValidYears: caValid,
-			CommonName: caCommonName,
-			SignerKey:  caKey,
-		}
+		caCsr = cert.NewCertificateAuthorityRequest(caValid, caCommonName, caKey)
 		if caCert, err = cert.CreateCert(caCertPath, caCsr); err == nil {
 			log.Printf("CA certificate stored at %s.\n", caCertPath)
 		} else {
