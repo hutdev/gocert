@@ -114,3 +114,11 @@ func CreateCert(path string, csr *CertificateRequest) (*x509.Certificate, error)
 		return nil, serialErr
 	}
 }
+
+func LoadCert(path string) (*x509.Certificate, error) {
+	if b, err := ioutil.ReadFile(path); err == nil {
+		return x509.ParseCertificate(b)
+	} else {
+		return nil, err
+	}
+}
