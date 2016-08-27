@@ -98,6 +98,7 @@ func main() {
 	var caKey, certKey *rsa.PrivateKey
 	var caCert *x509.Certificate
 	var err error
+	var caCsr, certCsr *cert.CertificateRequest
 
 	caKeyfileName := caname + FILENAME_SEP + KEYFILE_SUFFIX
 	caKeyPath := path.Join(outpath, caKeyfileName)
@@ -141,7 +142,12 @@ func main() {
 
 	//Create a self-signed CA certificate
 	if caCert == nil {
-		if caCert, err = cert.CreateCert(caCertPath, DEFAULT_CA_AGE, caCommonName, caKey, clientCert, nil, nil); err == nil {
+		caCsr = &cert.CertificateRequest{
+			ValidYears: caValid,
+			CommonName: caCommonName,
+			SignerKey:  caKey,
+		}
+		if caCert, err = cert.CreateCert(caCertPath, caCsr); err == nil {
 			log.Printf("CA certificate stored at %s.\n", caCertPath)
 		} else {
 			log.Fatal(err)
@@ -149,7 +155,15 @@ func main() {
 	}
 
 	//Create a child certificate
-	if _, err = cert.CreateCert(certPath, DEFAULT_CERT_AGE, commonName, caKey, clientCert, caCert, &certKey.PublicKey); err == nil {
+	certCsr = &cert.CertificateRequest{
+		ValidYears:           certValid,
+		CommonName:           caCommonName,
+		SignerKey:            caKey,
+		CertificateKey:       &certKey.PublicKey,
+		ClientCert:           clientCert,
+		CertificateAuthority: caCert,
+	}
+	if _, err = cert.CreateCert(certPath, certCsr); err == nil {
 		log.Printf("Child certificate stored at %s.\n", certPath)
 	} else {
 		log.Fatal(err)

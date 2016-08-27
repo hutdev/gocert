@@ -44,42 +44,51 @@ func GeneratePrivateKeyfile(path string, keysize int) (*rsa.PrivateKey, error) {
 	}
 }
 
-func CreateCert(path string, validYears int, cn string, signerKey *rsa.PrivateKey, clientCert bool, ca *x509.Certificate, key *rsa.PublicKey) (*x509.Certificate, error) {
+type CertificateRequest struct {
+	ValidYears           int
+	CommonName           string
+	SignerKey            *rsa.PrivateKey
+	CertificateKey       *rsa.PublicKey
+	ClientCert           bool
+	CertificateAuthority *x509.Certificate
+}
+
+func CreateCert(path string, csr *CertificateRequest) (*x509.Certificate, error) {
 	var signeeKey *rsa.PublicKey
 	var signer *x509.Certificate
-	isCa := ca == nil
+	isCa := csr.CertificateAuthority == nil
 
 	if isCa {
-		signeeKey = &signerKey.PublicKey
+		signeeKey = &csr.SignerKey.PublicKey
 	} else {
-		signeeKey = key
+		signeeKey = csr.CertificateKey
 	}
 
 	if serial, serialErr := rand.Int(rand.Reader, big.NewInt(math.MaxInt64)); serialErr == nil {
 		template := x509.Certificate{
 			Subject: pkix.Name{
-				CommonName: cn,
+				CommonName: csr.CommonName,
 			},
 			SerialNumber: serial,
 			NotBefore:    time.Now(),
 		}
-		template.NotAfter = template.NotBefore.AddDate(validYears, 0, 0)
+		template.NotAfter = template.NotBefore.AddDate(csr.ValidYears, 0, 0)
 
 		if isCa {
 			signer = &template
 			template.IsCA = true
 			template.KeyUsage = x509.KeyUsageCertSign
 		} else {
-			signer = ca
+			signer = csr.CertificateAuthority
 			template.KeyUsage = x509.KeyUsageDataEncipherment
-			if clientCert {
+			if csr.ClientCert {
 				template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
 			} else {
 				template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
 			}
 		}
 
-		if cert, err := x509.CreateCertificate(rand.Reader, &template, signer, signeeKey, signerKey); err == nil {
+		if cert, err := x509.CreateCertificate(rand.Reader, &template, signer, signeeKey, csr.SignerKey); err == nil {
 			ioutil.WriteFile(path, cert, DEFAULT_FILE_PERM)
 			return &template, nil
 		} else {
