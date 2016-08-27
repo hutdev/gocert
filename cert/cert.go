@@ -28,9 +28,11 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/pem"
 	"io/ioutil"
 	"math"
 	"math/big"
+	"os"
 	"time"
 )
 
@@ -43,13 +45,15 @@ type CertificateRequest struct {
 	CertificateKey       *rsa.PublicKey
 	ClientCert           bool
 	CertificateAuthority *x509.Certificate
+	EncodePEM            bool
 }
 
-func NewCertificateAuthorityRequest(validYears int, commonName string, privKey *rsa.PrivateKey) *CertificateRequest {
+func NewCertificateAuthorityRequest(validYears int, commonName string, privKey *rsa.PrivateKey, encodePem bool) *CertificateRequest {
 	return &CertificateRequest{
 		ValidYears: validYears,
 		CommonName: commonName,
 		SignerKey:  privKey,
+		EncodePEM:  encodePem,
 	}
 }
 
@@ -61,17 +65,43 @@ func GeneratePrivateKeyfile(path string, keysize int) (*rsa.PrivateKey, error) {
 	}
 }
 
-func LoadPrivateKeyfile(path string) (*rsa.PrivateKey, error) {
-	if b, err := ioutil.ReadFile(path); err == nil {
-		return x509.ParsePKCS1PrivateKey(b)
-	} else {
-		return nil, err
+func GeneratePEMPrivateKeyfile(path string, keysize int) (key *rsa.PrivateKey, err error) {
+	var pemblock *pem.Block
+	var outfile *os.File
+
+	if key, err = rsa.GenerateKey(rand.Reader, keysize); err == nil {
+		if outfile, err = os.Create(path); err == nil {
+			defer outfile.Close()
+			outfile.Chmod(DEFAULT_FILE_PERM)
+			pemblock = &pem.Block{
+				Type:  "RSA PRIVATE KEY",
+				Bytes: x509.MarshalPKCS1PrivateKey(key),
+			}
+			err = pem.Encode(outfile, pemblock)
+		}
 	}
+	return
 }
 
-func CreateCert(path string, csr *CertificateRequest) (*x509.Certificate, error) {
+func LoadPrivateKeyfile(path string) (key *rsa.PrivateKey, err error) {
+	var raw []byte
+	if raw, err = ioutil.ReadFile(path); err == nil {
+		if pemblock, _ := pem.Decode(raw); pemblock == nil {
+			key, err = x509.ParsePKCS1PrivateKey(raw)
+		} else {
+			key, err = x509.ParsePKCS1PrivateKey(pemblock.Bytes)
+		}
+	}
+	return
+}
+
+func CreateCert(path string, csr *CertificateRequest) (template *x509.Certificate, err error) {
 	var signeeKey *rsa.PublicKey
 	var signer *x509.Certificate
+	var pemblock *pem.Block
+	var outfile *os.File
+	var serial *big.Int
+	var cert []byte
 	isCa := csr.CertificateAuthority == nil
 
 	if isCa {
@@ -80,8 +110,8 @@ func CreateCert(path string, csr *CertificateRequest) (*x509.Certificate, error)
 		signeeKey = csr.CertificateKey
 	}
 
-	if serial, serialErr := rand.Int(rand.Reader, big.NewInt(math.MaxInt64)); serialErr == nil {
-		template := x509.Certificate{
+	if serial, err = rand.Int(rand.Reader, big.NewInt(math.MaxInt64)); err == nil {
+		template = &x509.Certificate{
 			Subject: pkix.Name{
 				CommonName: csr.CommonName,
 			},
@@ -91,7 +121,7 @@ func CreateCert(path string, csr *CertificateRequest) (*x509.Certificate, error)
 		template.NotAfter = template.NotBefore.AddDate(csr.ValidYears, 0, 0)
 
 		if isCa {
-			signer = &template
+			signer = template
 			template.IsCA = true
 			template.KeyUsage = x509.KeyUsageCertSign
 		} else {
@@ -104,21 +134,33 @@ func CreateCert(path string, csr *CertificateRequest) (*x509.Certificate, error)
 			}
 		}
 
-		if cert, err := x509.CreateCertificate(rand.Reader, &template, signer, signeeKey, csr.SignerKey); err == nil {
-			ioutil.WriteFile(path, cert, DEFAULT_FILE_PERM)
-			return &template, nil
-		} else {
-			return nil, err
+		if cert, err = x509.CreateCertificate(rand.Reader, template, signer, signeeKey, csr.SignerKey); err == nil {
+			if csr.EncodePEM {
+				if outfile, err = os.Create(path); err == nil {
+					defer outfile.Close()
+					outfile.Chmod(DEFAULT_FILE_PERM)
+					pemblock = &pem.Block{
+						Type:  "CERTIFICATE",
+						Bytes: cert,
+					}
+					err = pem.Encode(outfile, pemblock)
+				}
+			} else {
+				err = ioutil.WriteFile(path, cert, DEFAULT_FILE_PERM)
+			}
 		}
-	} else {
-		return nil, serialErr
 	}
+	return
 }
 
-func LoadCert(path string) (*x509.Certificate, error) {
-	if b, err := ioutil.ReadFile(path); err == nil {
-		return x509.ParseCertificate(b)
-	} else {
-		return nil, err
+func LoadCert(path string) (crt *x509.Certificate, err error) {
+	var raw []byte
+	if raw, err = ioutil.ReadFile(path); err == nil {
+		if pemblock, _ := pem.Decode(raw); pemblock == nil {
+			crt, err = x509.ParseCertificate(raw)
+		} else {
+			crt, err = x509.ParseCertificate(pemblock.Bytes)
+		}
 	}
+	return
 }

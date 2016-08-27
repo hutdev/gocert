@@ -53,6 +53,7 @@ var caValid int
 var certValid int
 var capath string
 var clientCert bool
+var encodePem bool
 
 func init() {
 	const cnUsage = "Value for the common name (CN) field of the certificate"
@@ -65,6 +66,7 @@ func init() {
 	const certNameFlag = "certname"
 
 	flag.BoolVar(&clientCert, "client", false, "Set this flag to create a client certificate")
+	flag.BoolVar(&encodePem, "pem", false, "Set this flag to encode output files in PEM format")
 	flag.StringVar(&outpath, "out", CURRENT_DIR, "Output directory")
 	flag.StringVar(&capath, "capath", CURRENT_DIR, "Path to location of an existing CA (private key and certificate)")
 	flag.IntVar(&keysize, "keysize", DEFAULT_KEYSIZE, "Size of the private keys in bits")
@@ -99,6 +101,7 @@ func main() {
 	var caCert *x509.Certificate
 	var err error
 	var caCsr, certCsr *cert.CertificateRequest
+	var generateKey func(string, int) (*rsa.PrivateKey, error)
 
 	caKeyfileName := caname + FILENAME_SEP + KEYFILE_SUFFIX
 	caKeyPath := path.Join(outpath, caKeyfileName)
@@ -109,15 +112,21 @@ func main() {
 	certfileName := certname + FILENAME_SEP + CERTFILE_SUFFIX
 	certPath := path.Join(outpath, certfileName)
 
+	if encodePem {
+		generateKey = cert.GeneratePEMPrivateKeyfile
+	} else {
+		generateKey = cert.GeneratePrivateKeyfile
+	}
+
 	if _, err = os.Stat(caKeyPath); err == nil {
 		if _, err = os.Stat(caCertPath); err == nil {
 			//Read CA private key from file
-			if caKey, err = x509.ParsePKCS1PrivateKey(*readOrDie(caKeyPath)); err != nil {
+			if caKey, err = cert.LoadPrivateKeyfile(caKeyPath); err != nil {
 				log.Fatal(err)
 			}
 			log.Printf("CA private key loaded from %s\n", caKeyPath)
 			//Read CA cert from file
-			if caCert, err = x509.ParseCertificate(*readOrDie(caCertPath)); err != nil {
+			if caCert, err = cert.LoadCert(caCertPath); err != nil {
 				log.Fatal(err)
 			}
 			log.Printf("CA certificate loaded from %s\n", caCertPath)
@@ -126,7 +135,7 @@ func main() {
 
 	//Create a private key for the CA
 	if caKey == nil {
-		if caKey, err = cert.GeneratePrivateKeyfile(caKeyPath, keysize); err == nil {
+		if caKey, err = generateKey(caKeyPath, keysize); err == nil {
 			log.Printf("CA private key stored at %s.\n", caKeyPath)
 		} else {
 			log.Fatal(err)
@@ -134,7 +143,7 @@ func main() {
 	}
 
 	//Create a private key for the certificate
-	if certKey, err = cert.GeneratePrivateKeyfile(certKeyPath, keysize); err == nil {
+	if certKey, err = generateKey(certKeyPath, keysize); err == nil {
 		log.Printf("Child certificate private key stored at %s.\n", certKeyPath)
 	} else {
 		log.Fatal(err)
@@ -142,7 +151,7 @@ func main() {
 
 	//Create a self-signed CA certificate
 	if caCert == nil {
-		caCsr = cert.NewCertificateAuthorityRequest(caValid, caCommonName, caKey)
+		caCsr = cert.NewCertificateAuthorityRequest(caValid, caCommonName, caKey, encodePem)
 		if caCert, err = cert.CreateCert(caCertPath, caCsr); err == nil {
 			log.Printf("CA certificate stored at %s.\n", caCertPath)
 		} else {
@@ -153,11 +162,12 @@ func main() {
 	//Create a child certificate
 	certCsr = &cert.CertificateRequest{
 		ValidYears:           certValid,
-		CommonName:           caCommonName,
+		CommonName:           commonName,
 		SignerKey:            caKey,
 		CertificateKey:       &certKey.PublicKey,
 		ClientCert:           clientCert,
 		CertificateAuthority: caCert,
+		EncodePEM:            encodePem,
 	}
 	if _, err = cert.CreateCert(certPath, certCsr); err == nil {
 		log.Printf("Child certificate stored at %s.\n", certPath)
