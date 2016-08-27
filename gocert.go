@@ -54,6 +54,7 @@ var commonName string
 var caCommonName string
 var certname string
 var caname string
+var keysize int
 
 func init() {
 	const cnUsage = "Value for the common name (CN) field of the certificate"
@@ -64,6 +65,7 @@ func init() {
 	flag.StringVar(&outpath, "out", DEFAULT_OUTPATH, "Output directory")
 	flag.StringVar(&certname, "certname", DEFAULT_CERT_NAME, "Certificate filename (without suffix)")
 	flag.StringVar(&caname, "caname", DEFAULT_CA_NAME, "CA filename (without suffix)")
+	flag.IntVar(&keysize, "keysize", DEFAULT_KEYSIZE, "Size of the private keys in bits")
 
 	if hostname, err := os.Hostname(); err == nil {
 		flag.StringVar(&commonName, cnFlag, hostname, cnUsage)
@@ -76,7 +78,7 @@ func init() {
 }
 
 func GenerateKey(path string) (*rsa.PrivateKey, error) {
-	if key, err := rsa.GenerateKey(rand.Reader, DEFAULT_KEYSIZE); err == nil {
+	if key, err := rsa.GenerateKey(rand.Reader, keysize); err == nil {
 		return key, ioutil.WriteFile(path, x509.MarshalPKCS1PrivateKey(key), RESTRICTIVE_PERMISSIONS)
 	} else {
 		return nil, err
