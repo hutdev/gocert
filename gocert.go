@@ -24,18 +24,15 @@
 package main
 
 import (
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"flag"
 	"io/ioutil"
 	"log"
-	"math"
-	"math/big"
 	"os"
 	"path"
-	"time"
+
+	"github.com/hutdev/gocert/cert"
 )
 
 const FILENAME_SEP = "."
@@ -45,7 +42,6 @@ const DEFAULT_KEYSIZE = 2048
 const DEFAULT_CA_AGE = 10
 const DEFAULT_CERT_AGE = 3
 const CURRENT_DIR = "."
-const RESTRICTIVE_PERMISSIONS = 0600
 
 var outpath string
 var commonName string
@@ -89,63 +85,6 @@ func init() {
 	flag.Parse()
 }
 
-func GenerateKey(path string) (*rsa.PrivateKey, error) {
-	if key, err := rsa.GenerateKey(rand.Reader, keysize); err == nil {
-		return key, ioutil.WriteFile(path, x509.MarshalPKCS1PrivateKey(key), RESTRICTIVE_PERMISSIONS)
-	} else {
-		return nil, err
-	}
-}
-
-func CreateCert(path string, cn string, signerKey *rsa.PrivateKey, ca *x509.Certificate, key *rsa.PublicKey) (*x509.Certificate, error) {
-	var signeeKey *rsa.PublicKey
-	var signer *x509.Certificate
-	var certAge int
-	isCa := ca == nil
-
-	if isCa {
-		signeeKey = &signerKey.PublicKey
-		certAge = caValid
-	} else {
-		signeeKey = key
-		certAge = certValid
-	}
-
-	if serial, serialErr := rand.Int(rand.Reader, big.NewInt(math.MaxInt64)); serialErr == nil {
-		template := x509.Certificate{
-			Subject: pkix.Name{
-				CommonName: cn,
-			},
-			SerialNumber: serial,
-			NotBefore:    time.Now(),
-		}
-		template.NotAfter = template.NotBefore.AddDate(certAge, 0, 0)
-
-		if isCa {
-			signer = &template
-			template.IsCA = true
-			template.KeyUsage = x509.KeyUsageCertSign
-		} else {
-			signer = ca
-			template.KeyUsage = x509.KeyUsageDataEncipherment
-			if clientCert {
-				template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
-			} else {
-				template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
-			}
-		}
-
-		if cert, err := x509.CreateCertificate(rand.Reader, &template, signer, signeeKey, signerKey); err == nil {
-			ioutil.WriteFile(path, cert, RESTRICTIVE_PERMISSIONS)
-			return &template, nil
-		} else {
-			return nil, err
-		}
-	} else {
-		return nil, serialErr
-	}
-}
-
 func readOrDie(path string) *[]byte {
 	if b, err := ioutil.ReadFile(path); err == nil {
 		return &b
@@ -186,7 +125,7 @@ func main() {
 
 	//Create a private key for the CA
 	if caKey == nil {
-		if caKey, err = GenerateKey(caKeyPath); err == nil {
+		if caKey, err = cert.GeneratePrivateKeyfile(caKeyPath, keysize); err == nil {
 			log.Printf("CA private key stored at %s.\n", caKeyPath)
 		} else {
 			log.Fatal(err)
@@ -194,7 +133,7 @@ func main() {
 	}
 
 	//Create a private key for the certificate
-	if certKey, err = GenerateKey(certKeyPath); err == nil {
+	if certKey, err = cert.GeneratePrivateKeyfile(certKeyPath, keysize); err == nil {
 		log.Printf("Child certificate private key stored at %s.\n", certKeyPath)
 	} else {
 		log.Fatal(err)
@@ -202,7 +141,7 @@ func main() {
 
 	//Create a self-signed CA certificate
 	if caCert == nil {
-		if caCert, err = CreateCert(caCertPath, caCommonName, caKey, nil, nil); err == nil {
+		if caCert, err = cert.CreateCert(caCertPath, DEFAULT_CA_AGE, caCommonName, caKey, clientCert, nil, nil); err == nil {
 			log.Printf("CA certificate stored at %s.\n", caCertPath)
 		} else {
 			log.Fatal(err)
@@ -210,7 +149,7 @@ func main() {
 	}
 
 	//Create a child certificate
-	if _, err = CreateCert(certPath, commonName, caKey, caCert, &certKey.PublicKey); err == nil {
+	if _, err = cert.CreateCert(certPath, DEFAULT_CERT_AGE, commonName, caKey, clientCert, caCert, &certKey.PublicKey); err == nil {
 		log.Printf("Child certificate stored at %s.\n", certPath)
 	} else {
 		log.Fatal(err)
