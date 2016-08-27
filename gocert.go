@@ -38,27 +38,32 @@ import (
 	"time"
 )
 
+const FILENAME_SEP = "."
+const KEYFILE_SUFFIX = "key"
+const CERTFILE_SUFFIX = "crt"
 const DEFAULT_KEYSIZE = 2048
 const DEFAULT_CA_AGE = 10
 const DEFAULT_CERT_AGE = 3
 const DEFAULT_OUTPATH = "."
-const DEFAULT_CA_KEY_NAME = "ca.key"
-const DEFAULT_CA_CERT_NAME = "ca.crt"
-const DEFAULT_CERT_KEY_NAME = "server.key"
-const DEFAULT_CERT_NAME = "server.crt"
+const DEFAULT_CA_NAME = "ca"
+const DEFAULT_CERT_NAME = "server"
 const RESTRICTIVE_PERMISSIONS = 0600
 
 var outpath string
 var commonName string
 var caCommonName string
+var certname string
+var caname string
 
 func init() {
-	const cnUsage = "Value for the common name (CN) field"
-	const cnFlag = "cn"
+	const cnUsage = "Value for the common name (CN) field of the certificate"
+	const cnFlag = "certcn"
 	const caCnUsage = "Value for the common name (CN) field of the certificate authority (CA)"
 	const caCnFlag = "cacn"
 
 	flag.StringVar(&outpath, "out", DEFAULT_OUTPATH, "Output directory")
+	flag.StringVar(&certname, "certname", DEFAULT_CERT_NAME, "Certificate filename (without suffix)")
+	flag.StringVar(&caname, "caname", DEFAULT_CA_NAME, "CA filename (without suffix)")
 
 	if hostname, err := os.Hostname(); err == nil {
 		flag.StringVar(&commonName, cnFlag, hostname, cnUsage)
@@ -124,14 +129,14 @@ func CreateCert(path string, cn string, signerKey *rsa.PrivateKey, ca *x509.Cert
 }
 
 func main() {
-	caKeyName := DEFAULT_CA_KEY_NAME
-	caKeyPath := path.Join(outpath, caKeyName)
-	caCertName := DEFAULT_CA_CERT_NAME
-	caCertPath := path.Join(outpath, caCertName)
-	certKeyName := DEFAULT_CERT_KEY_NAME
-	certKeyPath := path.Join(outpath, certKeyName)
-	certName := DEFAULT_CERT_NAME
-	certPath := path.Join(outpath, certName)
+	caKeyfileName := caname + FILENAME_SEP + KEYFILE_SUFFIX
+	caKeyPath := path.Join(outpath, caKeyfileName)
+	caCertfileName := caname + FILENAME_SEP + CERTFILE_SUFFIX
+	caCertPath := path.Join(outpath, caCertfileName)
+	certKeyfileName := certname + FILENAME_SEP + KEYFILE_SUFFIX
+	certKeyPath := path.Join(outpath, certKeyfileName)
+	certfileName := certname + FILENAME_SEP + CERTFILE_SUFFIX
+	certPath := path.Join(outpath, certfileName)
 	var caKey, certKey *rsa.PrivateKey
 	var caCert *x509.Certificate
 	var err error
