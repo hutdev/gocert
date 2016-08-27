@@ -44,7 +44,7 @@ const CERTFILE_SUFFIX = "crt"
 const DEFAULT_KEYSIZE = 2048
 const DEFAULT_CA_AGE = 10
 const DEFAULT_CERT_AGE = 3
-const DEFAULT_OUTPATH = "."
+const CURRENT_DIR = "."
 const DEFAULT_CA_NAME = "ca"
 const DEFAULT_CERT_NAME = "server"
 const RESTRICTIVE_PERMISSIONS = 0600
@@ -57,6 +57,7 @@ var caname string
 var keysize int
 var caValid int
 var certValid int
+var capath string
 
 func init() {
 	const cnUsage = "Value for the common name (CN) field of the certificate"
@@ -64,9 +65,10 @@ func init() {
 	const caCnUsage = "Value for the common name (CN) field of the certificate authority (CA)"
 	const caCnFlag = "cacn"
 
-	flag.StringVar(&outpath, "out", DEFAULT_OUTPATH, "Output directory")
+	flag.StringVar(&outpath, "out", CURRENT_DIR, "Output directory")
 	flag.StringVar(&certname, "certname", DEFAULT_CERT_NAME, "Certificate filename (without suffix)")
 	flag.StringVar(&caname, "caname", DEFAULT_CA_NAME, "CA filename (without suffix)")
+	flag.StringVar(&capath, "capath", CURRENT_DIR, "Path to location of an existing CA (private key and certificate)")
 	flag.IntVar(&keysize, "keysize", DEFAULT_KEYSIZE, "Size of the private keys in bits")
 	flag.IntVar(&caValid, "cav", DEFAULT_CA_AGE, "Validity of the CA certificate in years")
 	flag.IntVar(&certValid, "certv", DEFAULT_CERT_AGE, "Validity of the certificate in years")
@@ -134,7 +136,20 @@ func CreateCert(path string, cn string, signerKey *rsa.PrivateKey, ca *x509.Cert
 	}
 }
 
+func readOrDie(path string) *[]byte {
+	if b, err := ioutil.ReadFile(path); err == nil {
+		return &b
+	} else {
+		log.Fatal(err)
+		return nil
+	}
+}
+
 func main() {
+	var caKey, certKey *rsa.PrivateKey
+	var caCert *x509.Certificate
+	var err error
+
 	caKeyfileName := caname + FILENAME_SEP + KEYFILE_SUFFIX
 	caKeyPath := path.Join(outpath, caKeyfileName)
 	caCertfileName := caname + FILENAME_SEP + CERTFILE_SUFFIX
@@ -143,29 +158,45 @@ func main() {
 	certKeyPath := path.Join(outpath, certKeyfileName)
 	certfileName := certname + FILENAME_SEP + CERTFILE_SUFFIX
 	certPath := path.Join(outpath, certfileName)
-	var caKey, certKey *rsa.PrivateKey
-	var caCert *x509.Certificate
-	var err error
+
+	if _, err = os.Stat(caKeyPath); err == nil {
+		if _, err = os.Stat(caCertPath); err == nil {
+			//Read CA private key from file
+			if caKey, err = x509.ParsePKCS1PrivateKey(*readOrDie(caKeyPath)); err != nil {
+				log.Fatal(err)
+			}
+			log.Printf("CA private key loaded from %s\n", caKeyPath)
+			//Read CA cert from file
+			if caCert, err = x509.ParseCertificate(*readOrDie(caCertPath)); err != nil {
+				log.Fatal(err)
+			}
+			log.Printf("CA certificate loaded from %s\n", caCertPath)
+		}
+	}
 
 	//Create a private key for the CA
-	if caKey, err = GenerateKey(caKeyPath); err == nil {
-		log.Printf("Private key stored at %s.\n", caKeyPath)
-	} else {
-		log.Fatal(err)
+	if caKey == nil {
+		if caKey, err = GenerateKey(caKeyPath); err == nil {
+			log.Printf("CA private key stored at %s.\n", caKeyPath)
+		} else {
+			log.Fatal(err)
+		}
 	}
 
 	//Create a private key for the certificate
 	if certKey, err = GenerateKey(certKeyPath); err == nil {
-		log.Printf("Private key stored at %s.\n", certKeyPath)
+		log.Printf("Certificate private key stored at %s.\n", certKeyPath)
 	} else {
 		log.Fatal(err)
 	}
 
 	//Create a self-signed CA certificate
-	if caCert, err = CreateCert(caCertPath, caCommonName, caKey, nil, nil); err == nil {
-		log.Printf("CA certificate stored at %s.\n", caCertPath)
-	} else {
-		log.Fatal(err)
+	if caCert == nil {
+		if caCert, err = CreateCert(caCertPath, caCommonName, caKey, nil, nil); err == nil {
+			log.Printf("CA certificate stored at %s.\n", caCertPath)
+		} else {
+			log.Fatal(err)
+		}
 	}
 
 	//Create a server certificate
