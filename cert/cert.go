@@ -61,6 +61,14 @@ func GeneratePrivateKeyfile(path string, keysize int) (*rsa.PrivateKey, error) {
 	}
 }
 
+func LoadPrivateKeyfile(path string) (*rsa.PrivateKey, error) {
+	if b, err := ioutil.ReadFile(path); err == nil {
+		return x509.ParsePKCS1PrivateKey(b)
+	} else {
+		return nil, err
+	}
+}
+
 func CreateCert(path string, csr *CertificateRequest) (*x509.Certificate, error) {
 	var signeeKey *rsa.PublicKey
 	var signer *x509.Certificate
