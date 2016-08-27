@@ -55,6 +55,8 @@ var caCommonName string
 var certname string
 var caname string
 var keysize int
+var caValid int
+var certValid int
 
 func init() {
 	const cnUsage = "Value for the common name (CN) field of the certificate"
@@ -66,6 +68,8 @@ func init() {
 	flag.StringVar(&certname, "certname", DEFAULT_CERT_NAME, "Certificate filename (without suffix)")
 	flag.StringVar(&caname, "caname", DEFAULT_CA_NAME, "CA filename (without suffix)")
 	flag.IntVar(&keysize, "keysize", DEFAULT_KEYSIZE, "Size of the private keys in bits")
+	flag.IntVar(&caValid, "cav", DEFAULT_CA_AGE, "Validity of the CA certificate in years")
+	flag.IntVar(&certValid, "certv", DEFAULT_CERT_AGE, "Validity of the certificate in years")
 
 	if hostname, err := os.Hostname(); err == nil {
 		flag.StringVar(&commonName, cnFlag, hostname, cnUsage)
@@ -93,10 +97,10 @@ func CreateCert(path string, cn string, signerKey *rsa.PrivateKey, ca *x509.Cert
 
 	if isCa {
 		signeeKey = &signerKey.PublicKey
-		certAge = DEFAULT_CA_AGE
+		certAge = caValid
 	} else {
 		signeeKey = key
-		certAge = DEFAULT_CERT_AGE
+		certAge = certValid
 	}
 
 	if serial, serialErr := rand.Int(rand.Reader, big.NewInt(math.MaxInt64)); serialErr == nil {
