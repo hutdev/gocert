@@ -38,15 +38,15 @@ import (
 	"time"
 )
 
-const defaultKeysize = 2048
-const defaultCAAge = 10
-const defaultCertAge = 3
-const defaultOutpath = "."
-const defaultCaKeyName = "ca.key"
-const defaultCaCertName = "ca.crt"
-const defaultCertKeyName = "server.key"
-const defaultCertName = "server.crt"
-const restrictivePermissions = 0600
+const DEFAULT_KEYSIZE = 2048
+const DEFAULT_CA_AGE = 10
+const DEFAULT_CERT_AGE = 3
+const DEFAULT_OUTPATH = "."
+const DEFAULT_CA_KEY_NAME = "ca.key"
+const DEFAULT_CA_CERT_NAME = "ca.crt"
+const DEFAULT_CERT_KEY_NAME = "server.key"
+const DEFAULT_CERT_NAME = "server.crt"
+const RESTRICTIVE_PERMISSIONS = 0600
 
 var outpath string
 var commonName string
@@ -58,7 +58,7 @@ func init() {
 	const caCnUsage = "Value for the common name (CN) field of the certificate authority (CA)"
 	const caCnFlag = "cacn"
 
-	flag.StringVar(&outpath, "out", defaultOutpath, "Output directory")
+	flag.StringVar(&outpath, "out", DEFAULT_OUTPATH, "Output directory")
 
 	if hostname, err := os.Hostname(); err == nil {
 		flag.StringVar(&commonName, cnFlag, hostname, cnUsage)
@@ -71,8 +71,8 @@ func init() {
 }
 
 func GenerateKey(path string) (*rsa.PrivateKey, error) {
-	if key, err := rsa.GenerateKey(rand.Reader, defaultKeysize); err == nil {
-		return key, ioutil.WriteFile(path, x509.MarshalPKCS1PrivateKey(key), restrictivePermissions)
+	if key, err := rsa.GenerateKey(rand.Reader, DEFAULT_KEYSIZE); err == nil {
+		return key, ioutil.WriteFile(path, x509.MarshalPKCS1PrivateKey(key), RESTRICTIVE_PERMISSIONS)
 	} else {
 		return nil, err
 	}
@@ -86,10 +86,10 @@ func CreateCert(path string, cn string, signerKey *rsa.PrivateKey, ca *x509.Cert
 
 	if isCa {
 		signeeKey = &signerKey.PublicKey
-		certAge = defaultCAAge
+		certAge = DEFAULT_CA_AGE
 	} else {
 		signeeKey = key
-		certAge = defaultCertAge
+		certAge = DEFAULT_CERT_AGE
 	}
 
 	if serial, serialErr := rand.Int(rand.Reader, big.NewInt(math.MaxInt64)); serialErr == nil {
@@ -113,7 +113,7 @@ func CreateCert(path string, cn string, signerKey *rsa.PrivateKey, ca *x509.Cert
 		}
 
 		if cert, err := x509.CreateCertificate(rand.Reader, &template, signer, signeeKey, signerKey); err == nil {
-			ioutil.WriteFile(path, cert, restrictivePermissions)
+			ioutil.WriteFile(path, cert, RESTRICTIVE_PERMISSIONS)
 			return &template, nil
 		} else {
 			return nil, err
@@ -124,13 +124,13 @@ func CreateCert(path string, cn string, signerKey *rsa.PrivateKey, ca *x509.Cert
 }
 
 func main() {
-	caKeyName := defaultCaKeyName
+	caKeyName := DEFAULT_CA_KEY_NAME
 	caKeyPath := path.Join(outpath, caKeyName)
-	caCertName := defaultCaCertName
+	caCertName := DEFAULT_CA_CERT_NAME
 	caCertPath := path.Join(outpath, caCertName)
-	certKeyName := defaultCertKeyName
+	certKeyName := DEFAULT_CERT_KEY_NAME
 	certKeyPath := path.Join(outpath, certKeyName)
-	certName := defaultCertName
+	certName := DEFAULT_CERT_NAME
 	certPath := path.Join(outpath, certName)
 	var caKey, certKey *rsa.PrivateKey
 	var caCert *x509.Certificate
