@@ -126,7 +126,7 @@ func CreateCert(path string, csr *CertificateRequest) (template *x509.Certificat
 			template.KeyUsage = x509.KeyUsageCertSign
 		} else {
 			signer = csr.CertificateAuthority
-			template.KeyUsage = x509.KeyUsageDataEncipherment
+			template.KeyUsage = x509.KeyUsageDigitalSignature
 			if csr.ClientCert {
 				template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
 			} else {
